@@ -1,83 +1,9 @@
---[[--------------------------------------------------------------------
-
-  lcode.lua
-  Lua 5 code generator in Lua
-  This file is part of Yueliang.
-
-  Copyright (c) 2005-2007 Kein-Hong Man <khman@users.sf.net>
-  The COPYRIGHT file describes the conditions
-  under which this software may be distributed.
-
-  See the ChangeLog for more information.
-
-----------------------------------------------------------------------]]
-
---[[--------------------------------------------------------------------
--- Notes:
--- * one function manipulate a pointer argument with a simple data type
---   (can't be emulated by a table, ambiguous), now returns that value:
---   luaK:concat(fs, l1, l2)
--- * luaM_growvector uses the faux luaY:growvector, for limit checking
--- * some function parameters changed to boolean, additional code
---   translates boolean back to 1/0 for instruction fields
---
--- Not implemented:
--- * NOTE there is a failed assert in luaK:addk, a porting problem
---
--- Added:
--- * constant MAXSTACK from llimits.h
--- * luaK:ttisnumber(o) (from lobject.h)
--- * luaK:nvalue(o) (from lobject.h)
--- * luaK:setnilvalue(o) (from lobject.h)
--- * luaK:setnvalue(o, x) (from lobject.h)
--- * luaK:setbvalue(o, x) (from lobject.h)
--- * luaK:sethvalue(o, x) (from lobject.h), parameter L deleted
--- * luaK:setsvalue(o, x) (from lobject.h), parameter L deleted
--- * luaK:numadd, luaK:numsub, luaK:nummul, luaK:numdiv, luaK:nummod,
---   luaK:numpow, luaK:numunm, luaK:numisnan (from luaconf.h)
--- * copyexp(e1, e2) added in luaK:posfix to copy expdesc struct
---
--- Changed in 5.1.x:
--- * enum BinOpr has a new entry, OPR_MOD
--- * enum UnOpr has a new entry, OPR_LEN
--- * binopistest, unused in 5.0.x, has been deleted
--- * macro setmultret is new
--- * functions isnumeral, luaK_ret, boolK are new
--- * funcion nilK was named nil_constant in 5.0.x
--- * function interface changed: need_value, patchtestreg, concat
--- * TObject now a TValue
--- * functions luaK_setreturns, luaK_setoneret are new
--- * function luaK:setcallreturns deleted, to be replaced by:
---   luaK:setmultret, luaK:ret, luaK:setreturns, luaK:setoneret
--- * functions constfolding, codearith, codecomp are new
--- * luaK:codebinop has been deleted
--- * function luaK_setlist is new
--- * OPR_MULT renamed to OPR_MUL
-----------------------------------------------------------------------]]
-
--- requires luaP, luaX, luaY
-local luaY
 local luaK = {}
 local luaP = require(script.Parent.LuaP)
 local luaX = require(script.Parent.LuaX)
 
-------------------------------------------------------------------------
--- constants used by code generator
-------------------------------------------------------------------------
--- maximum stack for a Lua function
 luaK.MAXSTACK = 250  -- (from llimits.h)
 
---[[--------------------------------------------------------------------
--- other functions
-----------------------------------------------------------------------]]
-
-------------------------------------------------------------------------
--- emulation of TValue macros (these are from lobject.h)
--- * TValue is a table since lcode passes references around
--- * tt member field removed, using Lua's type() instead
--- * for setsvalue, sethvalue, parameter L (deleted here) in lobject.h
---   is used in an assert for testing, see checkliveness(g,obj)
-------------------------------------------------------------------------
 function luaK:ttisnumber(o)
   if o then return type(o.value) == "number" else return false end
 end
@@ -87,12 +13,6 @@ function luaK:setsvalue(o, x) o.value = x end
 luaK.setnvalue = luaK.setsvalue
 luaK.sethvalue = luaK.setsvalue
 luaK.setbvalue = luaK.setsvalue
-
-------------------------------------------------------------------------
--- The luai_num* macros define the primitive operations over numbers.
--- * this is not the entire set of primitive operations from luaconf.h
--- * used in luaK:constfolding()
-------------------------------------------------------------------------
 function luaK:numadd(a, b) return a + b end
 function luaK:numsub(a, b) return a - b end
 function luaK:nummul(a, b) return a * b end
@@ -102,16 +22,7 @@ function luaK:nummod(a, b) return a % b end
 function luaK:numpow(a, b) return a ^ b end
 function luaK:numunm(a) return -a end
 function luaK:numisnan(a) return not a == a end
-  -- a NaN cannot equal another NaN
 
---[[--------------------------------------------------------------------
--- code generator functions
-----------------------------------------------------------------------]]
-
-------------------------------------------------------------------------
--- Marks the end of a patch list. It is an invalid value both as an absolute
--- address, and as a list link (would link an element to itself).
-------------------------------------------------------------------------
 luaK.NO_JUMP = -1
 
 ------------------------------------------------------------------------
