@@ -1,62 +1,3 @@
---[[--------------------------------------------------------------------
-
-  ldump.lua
-  Save precompiled Lua chunks
-  This file is part of Yueliang.
-
-  Copyright (c) 2006 Kein-Hong Man <khman@users.sf.net>
-  The COPYRIGHT file describes the conditions
-  under which this software may be distributed.
-
-  See the ChangeLog for more information.
-
-----------------------------------------------------------------------]]
-
---[[--------------------------------------------------------------------
--- Notes:
--- * WARNING! byte order (little endian) and data type sizes for header
---   signature values hard-coded; see luaU:header
--- * chunk writer generators are included, see below
--- * one significant difference is that instructions are still in table
---   form (with OP/A/B/C/Bx fields) and luaP:Instruction() is needed to
---   convert them into 4-char strings
---
--- Not implemented:
--- * DumpVar, DumpMem has been removed
--- * DumpVector folded into folded into DumpDebug, DumpCode
---
--- Added:
--- * for convenience, the following two functions have been added:
---   luaU:make_setS: create a chunk writer that writes to a string
---   luaU:make_setF: create a chunk writer that writes to a file
---   (lua.h contains a typedef for lua_Writer/lua_Chunkwriter, and
---    a Lua-based implementation exists, writer() in lstrlib.c)
--- * luaU:ttype(o) (from lobject.h)
--- * for converting number types to its binary equivalent:
---   luaU:from_double(x): encode double value for writing
---   luaU:from_int(x): encode integer value for writing
---     (error checking is limited for these conversion functions)
---     (double conversion does not support denormals or NaNs)
---
--- Changed in 5.1.x:
--- * the dumper was mostly rewritten in Lua 5.1.x, so notes on the
---   differences between 5.0.x and 5.1.x is limited
--- * LUAC_VERSION bumped to 0x51, LUAC_FORMAT added
--- * developer is expected to adjust LUAC_FORMAT in order to identify
---   non-standard binary chunk formats
--- * header signature code is smaller, has been simplified, and is
---   tested as a single unit; its logic is shared with the undumper
--- * no more endian conversion, invalid endianness mean rejection
--- * opcode field sizes are no longer exposed in the header
--- * code moved to front of a prototype, followed by constants
--- * debug information moved to the end of the binary chunk, and the
---   relevant functions folded into a single function
--- * luaU:dump returns a writer status code
--- * chunk writer now implements status code because dumper uses it
--- * luaU:endianness removed
-----------------------------------------------------------------------]]
-
---requires luaP
 local luaU = {}
 local luaP = require(script.Parent.LuaP)
 
@@ -157,7 +98,7 @@ function luaU:from_double(x)
     mantissa = (mantissa * 2 - 1) * math.ldexp(0.5, 53)
     exponent = exponent + 1022
   end
-  local v, byte = "", nil -- convert to bytes
+  local v, byte = "" -- convert to bytes
   x = math.floor(mantissa)
   for i = 1,6 do
     x, byte = grab_byte(x); v = v..byte -- 47:0
